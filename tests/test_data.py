@@ -47,7 +47,11 @@ class FakeTicker:
         self._history = history
 
     def history(self, **_kwargs):
-        return self._history
+        history = self._history
+        if not history.empty and not isinstance(history.index, pd.DatetimeIndex):
+            # Yahoo always returns dated rows; give plain test frames a date index
+            history = history.set_axis(pd.bdate_range("2026-01-01", periods=len(history)))
+        return history
 
 
 def test_fetch_prices_drops_missing_values(monkeypatch):
@@ -58,6 +62,24 @@ def test_fetch_prices_drops_missing_values(monkeypatch):
 
     assert prices.tolist() == [100.0, 101.0]
     assert prices.name == "AAPL"
+
+
+def test_fetch_prices_strips_timezone_to_calendar_dates(monkeypatch):
+    index = pd.DatetimeIndex(["2026-10-19 00:00", "2026-10-20 00:00"], tz="Europe/Paris")
+    history = pd.DataFrame({"Close": [100.0, 101.0]}, index=index)
+    monkeypatch.setattr(data.yf, "Ticker", lambda _symbol: FakeTicker(history))
+
+    prices = fetch_prices("MC.PA")
+
+    assert prices.index.tz is None
+    assert prices.index.tolist() == [pd.Timestamp("2026-10-19"), pd.Timestamp("2026-10-20")]
+
+
+def test_fetch_risk_free_rate_converts_percent_to_decimal(monkeypatch):
+    history = pd.DataFrame({"Close": [4.0, 4.2]})
+    monkeypatch.setattr(data.yf, "Ticker", lambda _symbol: FakeTicker(history))
+
+    assert data.fetch_risk_free_rate() == pytest.approx(0.041)
 
 
 @pytest.mark.parametrize(

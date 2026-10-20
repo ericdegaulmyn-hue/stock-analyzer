@@ -11,6 +11,7 @@ Portfolio demo site for job interviews: enter a ticker → price chart + risk me
 - Python + Streamlit, Plotly charts, yfinance data (cached), LiteLLM → Claude (Haiku 5.5 default), native web search.
 - Site UI in English. Every AI output shows "Not investment advice".
 - Benchmark for alpha/beta chosen automatically from the ticker's market.
+- Metrics (`metrics.py`): 252 trading days, risk-free rate = average 13-week US T-bill (`^IRX`) over the period, historical 1-day VaR 95%, Jensen's alpha. Computed on dates common to stock and benchmark. Periods 1Y (default) / 3Y / 5Y.
 - Hosted on Streamlit Community Cloud. API keys only in `.streamlit/secrets.toml` (gitignored) / Streamlit secrets — never committed.
 
 ## Agents
