@@ -103,6 +103,83 @@ def fetch_prices(symbol: str, period: str = "1y") -> pd.Series:
     return prices
 
 
+@dataclass(frozen=True)
+class Fundamentals:
+    summary: str
+    ratios: dict[str, float | None]
+    # fiscal year (e.g. "2025") -> line item (e.g. "Total Revenue") -> value
+    income_statement: dict[str, dict[str, float]]
+
+
+@dataclass(frozen=True)
+class AnalystView:
+    recommendation: str | None
+    analyst_count: int | None
+    current_price: float | None
+    target_mean: float | None
+    target_low: float | None
+    target_high: float | None
+    # rating ("strongBuy", "buy", ...) -> number of analysts, latest month
+    rating_counts: dict[str, int]
+
+
+# Yahoo `info` keys used by the fundamental analyst. Margins, growth and ROE are decimals.
+RATIO_KEYS = (
+    "marketCap",
+    "trailingPE",
+    "forwardPE",
+    "priceToBook",
+    "profitMargins",
+    "operatingMargins",
+    "revenueGrowth",
+    "earningsGrowth",
+    "returnOnEquity",
+    "debtToEquity",
+    "freeCashflow",
+)
+INCOME_ROWS = ("Total Revenue", "Gross Profit", "Operating Income", "Net Income", "Diluted EPS")
+RATING_COLUMNS = ("strongBuy", "buy", "hold", "sell", "strongSell")
+
+
+def fetch_fundamentals(symbol: str, years: int = 4) -> Fundamentals:
+    """Key ratios and the last annual income statements (empty for ETFs and crypto)."""
+    ticker = yf.Ticker(symbol)
+    info = ticker.info or {}
+    statement = ticker.income_stmt
+    income: dict[str, dict[str, float]] = {}
+    if statement is not None and not statement.empty:
+        rows = [row for row in INCOME_ROWS if row in statement.index]
+        for column in statement.columns[:years]:
+            values = statement.loc[rows, column].dropna()
+            if not values.empty:
+                income[str(column.year)] = {row: float(v) for row, v in values.items()}
+    return Fundamentals(
+        summary=info.get("longBusinessSummary") or "",
+        ratios={key: info.get(key) for key in RATIO_KEYS},
+        income_statement=income,
+    )
+
+
+def fetch_analyst_view(symbol: str) -> AnalystView:
+    """Wall Street consensus: rating, price targets and rating distribution."""
+    ticker = yf.Ticker(symbol)
+    info = ticker.info or {}
+    counts: dict[str, int] = {}
+    recommendations = ticker.recommendations
+    if recommendations is not None and not recommendations.empty:
+        latest = recommendations.iloc[0]
+        counts = {col: int(latest[col]) for col in RATING_COLUMNS if col in latest}
+    return AnalystView(
+        recommendation=info.get("recommendationKey"),
+        analyst_count=info.get("numberOfAnalystOpinions"),
+        current_price=info.get("currentPrice"),
+        target_mean=info.get("targetMeanPrice"),
+        target_low=info.get("targetLowPrice"),
+        target_high=info.get("targetHighPrice"),
+        rating_counts=counts,
+    )
+
+
 def fetch_risk_free_rate(period: str = "1y") -> float:
     """Average annual T-bill yield over the period, as a decimal (0.04 = 4%)."""
     return fetch_prices(RISK_FREE_SYMBOL, period).mean() / 100

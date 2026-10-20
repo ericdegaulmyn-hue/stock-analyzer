@@ -5,10 +5,14 @@ import math
 import streamlit as st
 
 from stock_analyzer.charts import price_and_drawdown_figure
+from stock_analyzer.committee import StockBrief
+from stock_analyzer.committee_view import render_committee
 from stock_analyzer.data import (
     TickerNotFoundError,
     benchmark_for,
+    fetch_analyst_view,
     fetch_company_info,
+    fetch_fundamentals,
     fetch_prices,
     fetch_risk_free_rate,
     search_tickers,
@@ -32,6 +36,16 @@ def cached_prices(symbol: str, period: str):
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False)
 def cached_info(symbol: str):
     return fetch_company_info(symbol)
+
+
+@st.cache_data(ttl=CACHE_TTL, show_spinner=False)
+def cached_fundamentals(symbol: str):
+    return fetch_fundamentals(symbol)
+
+
+@st.cache_data(ttl=CACHE_TTL, show_spinner=False)
+def cached_analyst_view(symbol: str):
+    return fetch_analyst_view(symbol)
 
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False)
@@ -131,3 +145,17 @@ st.plotly_chart(
     price_and_drawdown_figure(prices, benchmark_prices, info.name, benchmark_name),
     use_container_width=True,
 )
+
+brief = StockBrief(
+    symbol=selected.symbol,
+    name=info.name,
+    sector=info.sector,
+    currency=info.currency,
+    benchmark_name=benchmark_name,
+    period_label=period_label,
+    risk_free_rate=risk_free_rate,
+    metrics=metrics,
+    fundamentals=cached_fundamentals(selected.symbol),
+    analyst_view=cached_analyst_view(selected.symbol),
+)
+render_committee(brief, run_key=f"{selected.symbol}:{period}")
