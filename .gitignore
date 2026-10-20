@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets (API keys) — never commit
+.streamlit/secrets.toml
+.env
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Local Claude Code config
+.claude/
