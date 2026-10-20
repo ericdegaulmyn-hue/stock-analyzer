@@ -161,7 +161,34 @@ def test_stream_statement_reports_a_refusal():
     assert "declined" in text
 
 
+class EchoMessages:
+    """Thread-safe fake: each agent answers with its own name plus the prompt's round."""
+
+    def stream(self, **kwargs):
+        agent = next(a for a in c.ANALYSTS if a.system == kwargs["system"])
+        prompt = kwargs["messages"][0]["content"]
+        round_tag = "R2" if "Round 2" in prompt else "R1"
+        return FakeStream([f"{agent.key}-{round_tag}"], "end_turn")
+
+
+def test_run_round_gets_every_analyst_in_order():
+    client = SimpleNamespace(messages=EchoMessages())
+
+    opening = c.run_round(client, make_brief(), 1, [])
+    debate = c.run_round(client, make_brief(), 2, opening)
+
+    assert [s.text for s in opening] == ["sentiment-R1", "fundamental-R1", "quant-R1"]
+    assert [s.text for s in debate] == ["sentiment-R2", "fundamental-R2", "quant-R2"]
+    assert {s.round for s in debate} == {2}
+
+
 def test_write_report_returns_the_parsed_verdict():
     client = fake_client()
     assert c.write_report(client, make_brief(), []) == "the verdict"
     assert client.messages.calls[0]["output_format"] is c.Verdict
+
+
+def test_dollar_signs_are_escaped_for_streamlit_markdown():
+    from stock_analyzer.committee_view import as_markdown
+
+    assert as_markdown("from $339.50 to $342.94") == r"from \$339.50 to \$342.94"
