@@ -6,7 +6,7 @@ import streamlit as st
 
 from stock_analyzer.charts import price_and_drawdown_figure
 from stock_analyzer.committee import StockBrief
-from stock_analyzer.committee_view import render_committee
+from stock_analyzer.committee_view import committee_locked, render_committee
 from stock_analyzer.data import (
     TickerNotFoundError,
     benchmark_for,
@@ -65,7 +65,10 @@ st.set_page_config(page_title="Stock Analyzer", page_icon="📈", layout="wide")
 st.title("Stock Analyzer")
 st.caption("Risk analytics for any listed stock, ETF or crypto. Not investment advice.")
 
-query = st.text_input("Search a stock", placeholder="e.g. Apple, LVMH, MC.PA, BTC-USD")
+locked = committee_locked()  # controls are frozen while the AI committee deliberates
+query = st.text_input(
+    "Search a stock", placeholder="e.g. Apple, LVMH, MC.PA, BTC-USD", disabled=locked
+)
 if not query:
     st.stop()
 
@@ -75,8 +78,8 @@ if not results:
     st.warning(f"No stock found for “{query}”. Try the company name or its ticker.")
     st.stop()
 
-selected = st.selectbox("Select a result", results, format_func=lambda r: r.label)
-period_label = st.radio("Period", list(PERIODS), horizontal=True)
+selected = st.selectbox("Select a result", results, format_func=lambda r: r.label, disabled=locked)
+period_label = st.radio("Period", list(PERIODS), horizontal=True, disabled=locked)
 
 period = PERIODS[period_label]
 benchmark_symbol, benchmark_name = benchmark_for(selected.symbol)
@@ -158,4 +161,4 @@ brief = StockBrief(
     fundamentals=cached_fundamentals(selected.symbol),
     analyst_view=cached_analyst_view(selected.symbol),
 )
-render_committee(brief, run_key=f"{selected.symbol}:{period}")
+render_committee(brief)

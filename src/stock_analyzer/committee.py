@@ -1,11 +1,12 @@
 """AI Investment Committee: three Claude analysts debate a stock in two rounds,
 then a rapporteur writes the final report with a Buy / Hold / Sell rating.
 
-The UI drives the order of turns (see app.py); this module builds the prompts,
-streams each statement and produces the structured verdict.
+The three analysts speak in parallel within each round; in round 2 each one
+reacts to the round 1 statements. No Streamlit here: see committee_view.py.
 """
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Literal
 
@@ -82,10 +83,9 @@ RAPPORTEUR = Agent(
     name="Rapporteur",
     avatar="📝",
     role=(
-        "You listened silently to the whole debate. You write the committee's final "
-        "report for the client: a fair synthesis of every view, the main points of "
-        "agreement and disagreement, and one rating the committee would most likely "
-        "converge on, with an honest confidence level."
+        "You listened silently to the whole debate. You give the client the "
+        "committee's answer: one rating the committee would most likely converge on, "
+        "an honest confidence level, and a short synthesis of why."
     ),
     uses_web=False,
 )
@@ -118,9 +118,13 @@ class Verdict(BaseModel):
     rating: Literal["BUY", "HOLD", "SELL"]
     confidence: Literal["LOW", "MEDIUM", "HIGH"]
     summary: str
-    bull_points: list[str]
-    bear_points: list[str]
-    disagreements: list[str]
+
+
+@dataclass(frozen=True)
+class CommitteeResult:
+    statements: list[Statement]
+    verdict: Verdict | None
+    period_label: str
 
 
 # ---------- Prompt building ----------
@@ -253,9 +257,8 @@ def rebuttal_prompt(agent: Agent, brief: StockBrief, statements: list[Statement]
 def report_prompt(brief: StockBrief, statements: list[Statement]) -> str:
     return (
         f"{header(brief)}\n\nFull debate:\n{format_transcript(statements)}\n\n"
-        "Write the committee report: a summary of 3 to 5 sentences, the main bull "
-        "and bear points (2 to 4 each, one short sentence each), the key "
-        "disagreements, and the final rating with your confidence."
+        "Give the committee's answer: the final rating, your confidence, and a "
+        "summary of 2 to 3 short sentences naming the decisive arguments."
     )
 
 
@@ -299,3 +302,20 @@ def write_report(
         output_config={"effort": "medium"},
     )
     return response.parsed_output
+
+
+def run_round(
+    client: anthropic.Anthropic, brief: StockBrief, round_no: int, previous: list[Statement]
+) -> list[Statement]:
+    """All analysts speak at once; round 2 statements react to `previous` (round 1)."""
+
+    def speak(agent: Agent) -> Statement:
+        if round_no == 1:
+            prompt = opening_prompt(agent, brief)
+        else:
+            prompt = rebuttal_prompt(agent, brief, previous)
+        text = "".join(stream_statement(client, agent, prompt))
+        return Statement(agent=agent, round=round_no, text=text)
+
+    with ThreadPoolExecutor(max_workers=len(ANALYSTS)) as pool:
+        return list(pool.map(speak, ANALYSTS))
