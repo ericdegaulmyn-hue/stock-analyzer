@@ -82,6 +82,52 @@ def test_fetch_risk_free_rate_converts_percent_to_decimal(monkeypatch):
     assert data.fetch_risk_free_rate() == pytest.approx(0.041)
 
 
+class FakeInfoTicker:
+    def __init__(self, info, income_stmt=None, recommendations=None):
+        self.info = info
+        self.income_stmt = income_stmt if income_stmt is not None else pd.DataFrame()
+        self.recommendations = recommendations
+
+
+def test_fetch_fundamentals_keeps_recent_years_and_known_rows(monkeypatch):
+    statement = pd.DataFrame(
+        {
+            pd.Timestamp("2025-09-30"): [400.0, 100.0, 1.0],
+            pd.Timestamp("2024-09-30"): [380.0, None, 2.0],
+        },
+        index=["Total Revenue", "Net Income", "Some Other Row"],
+    )
+    info = {"longBusinessSummary": "Phones.", "marketCap": 5e12}
+    monkeypatch.setattr(data.yf, "Ticker", lambda _s: FakeInfoTicker(info, statement))
+
+    result = data.fetch_fundamentals("AAPL")
+
+    assert result.summary == "Phones."
+    assert result.ratios["marketCap"] == 5e12
+    assert result.ratios["trailingPE"] is None
+    assert result.income_statement == {
+        "2025": {"Total Revenue": 400.0, "Net Income": 100.0},
+        "2024": {"Total Revenue": 380.0},
+    }
+
+
+def test_fetch_analyst_view_reads_latest_month(monkeypatch):
+    recommendations = pd.DataFrame(
+        {"period": ["0m", "-1m"], "strongBuy": [6, 5], "buy": [18, 19], "hold": [14, 13]}
+    )
+    info = {"recommendationKey": "buy", "numberOfAnalystOpinions": 39, "targetMeanPrice": 328.4}
+    monkeypatch.setattr(
+        data.yf, "Ticker", lambda _s: FakeInfoTicker(info, recommendations=recommendations)
+    )
+
+    view = data.fetch_analyst_view("AAPL")
+
+    assert view.recommendation == "buy"
+    assert view.analyst_count == 39
+    assert view.target_mean == 328.4
+    assert view.rating_counts == {"strongBuy": 6, "buy": 18, "hold": 14}
+
+
 @pytest.mark.parametrize(
     "history",
     [pd.DataFrame(), pd.DataFrame({"Close": [None, None]})],
