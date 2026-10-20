@@ -26,6 +26,9 @@ DEFAULT_BENCHMARK = ("^GSPC", "S&P 500")
 
 SUPPORTED_QUOTE_TYPES = {"EQUITY", "ETF", "CRYPTOCURRENCY"}
 
+# 13-week US Treasury bill yield, quoted by Yahoo in percent (4.08 = 4.08%).
+RISK_FREE_SYMBOL = "^IRX"
+
 
 class TickerNotFoundError(ValueError):
     """Raised when Yahoo Finance returns no data for a ticker."""
@@ -82,15 +85,27 @@ def benchmark_for(symbol: str) -> tuple[str, str]:
 
 
 def fetch_prices(symbol: str, period: str = "1y") -> pd.Series:
-    """Daily adjusted close prices for the given period (e.g. "1y", "5y")."""
+    """Daily adjusted close prices for the given period (e.g. "1y", "5y").
+
+    The index is plain calendar dates (no timezone) so series from different
+    exchanges line up on the same day.
+    """
     history = yf.Ticker(symbol).history(period=period, auto_adjust=True)
     if history.empty or "Close" not in history:
         raise TickerNotFoundError(f"No price data for {symbol!r}")
     prices = history["Close"].dropna()
     if prices.empty:
         raise TickerNotFoundError(f"No price data for {symbol!r}")
+    if prices.index.tz is not None:
+        prices.index = prices.index.tz_localize(None)
+    prices.index = prices.index.normalize()
     prices.name = symbol
     return prices
+
+
+def fetch_risk_free_rate(period: str = "1y") -> float:
+    """Average annual T-bill yield over the period, as a decimal (0.04 = 4%)."""
+    return fetch_prices(RISK_FREE_SYMBOL, period).mean() / 100
 
 
 def fetch_company_info(symbol: str) -> CompanyInfo:
