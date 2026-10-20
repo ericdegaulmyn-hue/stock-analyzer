@@ -12,7 +12,7 @@ Portfolio demo site for job interviews: enter a ticker → price chart + risk me
 - Site UI in English. Every AI output shows "Not investment advice".
 - Benchmark for alpha/beta chosen automatically from the ticker's market.
 - Metrics (`metrics.py`): 252 trading days, risk-free rate = average 13-week US T-bill (`^IRX`) over the period, historical 1-day VaR 95%, Jensen's alpha. Computed on dates common to stock and benchmark. Periods 1Y (default) / 3Y / 5Y.
-- Hosted on Streamlit Community Cloud: https://financial-jarvis.streamlit.app (redeploys on merge to main). API keys only in `.streamlit/secrets.toml` (gitignored) / Streamlit secrets — never committed.
+- Hosted on Streamlit Community Cloud (redeploys on merge to main). Keep the app URL out of the repo: the owner shares it privately. API keys only in `.streamlit/secrets.toml` (gitignored) / Streamlit secrets — never committed.
 
 ## Agents
 Market Sentiment, Fundamental, Quant/Risk (interprets the site's own metrics), Rapporteur (summarizes). 2-round debate (analysts in parallel within a round), then a short verdict; the full debate sits in a collapsed expander.
